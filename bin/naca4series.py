@@ -37,9 +37,29 @@ group_def.add_argument(
     help='number of points on camber line (default: %(default)s)'
 )
 group_def.add_argument(
+    '-c', '--chordlength', dest='chord', metavar='C',
+    type=float, default='1.0',
+    help='chord length (default: %(default)s)'
+)
+group_def.add_argument(
     '-s', '--spacing', dest='spacing', metavar='TYPE',
     type=str, default='cos', choices=('cos', '2cos', 'lin',),
     help='spacing (default: %(default)s)'
+)
+group_def.add_argument(
+    '-z', '--zcoordinate', dest='zval', metavar='Z',
+    type=float, default='0.0',
+    help='z position of aerofoil section (default: %(default)s)'
+)
+group_def.add_argument(
+    '-p', '--plane', dest='plane', metavar='IJ',
+    type=str, default='xy', choices=('xy', 'xz', 'yz',),
+    help='aerofoil plane (default: %(default)s)'
+)
+group_def.add_argument(
+    '--meancamberline', dest='meancamberline',
+    action='store_true',
+    help='only write the mean camber line (default: false)'
 )
 
 # parser group for input/output
@@ -131,18 +151,35 @@ writer = csv.writer(
 
 for i in range(2*Npts):  # 2x for both lower and upper
 
-    if i < Npts:
-        # go backwards
-        x_i = x_U[-1-i]
-        y_i = y_U[-1-i]
-    elif i == Npts:
-        continue  # skip this one (duplicate LE)
-        #NOTE: TE is not closed by definition
+    if args.meancamberline:
+        # only print the mean camber line (x_C and y_C)
+        if i >= Npts:
+            continue
+        x_i = x_C[i]
+        y_i = y_C[i]
     else:
-        # go forward
-        x_i = x_L[i-Npts]
-        y_i = y_L[i-Npts]
-    z_i = 0
+        if i < Npts:
+            # go backwards
+            x_i = x_U[-1-i]
+            y_i = y_U[-1-i]
+        elif i == Npts:
+            continue  # skip this one (duplicate LE)
+            #NOTE: TE is not closed by definition
+        else:
+            # go forward
+            x_i = x_L[i-Npts]
+            y_i = y_L[i-Npts]
 
-    # write data point
-    writer.writerow([x_i, y_i, z_i])
+    # transform
+    x_i *= args.chord
+    y_i *= args.chord
+    z_i = args.zval
+
+    # assign to correct plane and write data point
+    if args.plane == 'xy':
+        row = [x_i, y_i, z_i]
+    elif args.plane == 'xz':
+        row = [x_i, z_i, y_i]
+    elif args.plane == 'yz':
+        row = [z_i, x_i, y_i]
+    writer.writerow(row)
