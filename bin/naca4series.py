@@ -1,5 +1,12 @@
 #!/usr/bin/env python
 
+"""
+Create a NACA 4-series aerofoil.
+
+For usage, run naca4series with the -h/--help option.
+Definition: https://en.wikipedia.org/wiki/NACA_airfoil#Four-digit_series
+"""
+
 ### LIBRARIES ###
 
 import sys       # https://docs.python.org/2/library/sys.html
