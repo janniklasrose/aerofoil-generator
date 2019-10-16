@@ -5,6 +5,9 @@ Create a NACA 4-series aerofoil.
 
 For usage, run naca4series with the -h/--help option.
 Definition: https://en.wikipedia.org/wiki/NACA_airfoil#Four-digit_series
+See also: "Theory of wing sections" by Abbott
+
+Copyright (c) 2019 Jan Niklas Rose
 """
 
 ### LIBRARIES ###
