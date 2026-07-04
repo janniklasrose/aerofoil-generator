@@ -123,6 +123,8 @@ for i in range(Npts):
                    - 0.3516 * x_c**2
                    + 0.2843 * x_c**3
                    - 0.1015 * x_c**4 )
+
+    # mean camber line
     if M==0 and P==0:
         # symmetrical
         y_c = 0
@@ -135,6 +137,7 @@ for i in range(Npts):
         else:
             y_c = M/((1-P)**2)*((1-2*P)+2*P*x_c-x_c**2)
             dycdx = 2*M/((1-P)**2)*(P-x_c)
+
     # coordinates
     theta = math.atan(dycdx)
     # mean camber line
