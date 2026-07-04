@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 
 """
-Create a NACA 4-series aerofoil.
+Create a NACA 5-series aerofoil.
 
-For usage, run naca4series with the -h/--help option.
-Definition: https://en.wikipedia.org/wiki/NACA_airfoil#Four-digit_series
-See also: "Theory of wing sections" by Abbott
+For usage, run naca5series with the -h/--help option.
+Definition: https://en.wikipedia.org/wiki/NACA_airfoil#Five-digit_series
+See also: NACA-TR-537 and NACA-TR-610.
 
 Copyright (c) 2026 Jan Niklas Rose
 """
@@ -17,29 +17,56 @@ import argparse  # https://docs.python.org/2/library/argparse.html
 import csv       # https://docs.python.org/2/library/csv.html
 import math      # https://docs.python.org/2/library/math.html
 
+### CONSTANTS ###
+
+# mean line tables for design lift coefficient cld = 0.3
+# table[(P, Q)] = (r, k1)
+STANDARD_MEANLINES = {
+    ('1', '0'): (0.0580, 361.4  ), #  5%
+    ('2', '0'): (0.1260,  51.64 ), # 10%
+    ('4', '0'): (0.2900,   6.643), # 20%
+    ('3', '0'): (0.2025,  15.957), # 15%
+    ('5', '0'): (0.3910,   3.230), # 25%
+}
+REFLECT_MEANLINES = {
+    # ('1', '1') = NACA 211 was not published in NACA-TR-537.
+    ('2', '1'): (0.1300, 51.990), # 10%
+    ('3', '1'): (0.2170, 15.793), # 15%
+    ('4', '1'): (0.3180,  6.520), # 20%
+    ('5', '1'): (0.4410,  3.191), # 25%
+}
+MEANLINE_TABLE = {**STANDARD_MEANLINES, **REFLECT_MEANLINES}
+
 
 ### PARSE ARGUMENTS ###
 
-# validator for NACA 4-series definition
-def valid_naca4(string):
-    if (len(string) != 4) or (not string.isdigit()):
-        msg = "%r is not a 4 digit NACA aerofoil definition" % string
+# validator for NACA 5-series definition
+def valid_naca5(string):
+    """Validate a NACA 5-series definition."""
+    if (len(string) != 5) or (not string.isdigit()):
+        msg = "%r is not a 5 digit NACA aerofoil definition" % string
+        raise argparse.ArgumentTypeError(msg)
+    if (string[1], string[2]) not in MEANLINE_TABLE:
+        msg = "%r is not a supported NACA 5-series mean line (leading 3 digits)" % string
+        raise argparse.ArgumentTypeError(msg)
+    if (string[0] == '0') and (string[2] != '0'):
+        msg = "%r is symmetric (digit 1) and must not have camber (digit 3)" % string
         raise argparse.ArgumentTypeError(msg)
     return string
 
 # command line parser
 parser = argparse.ArgumentParser(
-    prog='naca4series',
-    description='Create a NACA 4-series aerofoil',
-    epilog='See: https://en.wikipedia.org/wiki/NACA_airfoil#Four-digit_series'
+    prog='naca5series',
+    description='Create a NACA 5-series aerofoil',
+    epilog='See: https://en.wikipedia.org/wiki/NACA_airfoil#Five-digit_series'
 )
 
 # parser group for aerofoil definition
 group_def = parser.add_argument_group('Aerofoil definition')
 group_def.add_argument(
-    'MPTT', metavar='MPTT',
-    type=valid_naca4,
-    help='4 digits specifying MPTT (e.g. 0012)'
+    'LPQTT', metavar='LPQTT',
+    type=valid_naca5,
+    help='5 digits specifying LPQTT (e.g. 23012)'
 )
 group_def.add_argument(
     '-r', '--resolution', dest='res', metavar='N',
@@ -107,9 +134,14 @@ elif args.spacing == 'lin':
     x = linspace(0.0, 1.0, args.res)
 
 # extract values from NACA definition
-M = float(args.MPTT[0])/100    # maximum camber
-P = float(args.MPTT[1])/10     # percentage location of maximum thickness
-T = float(args.MPTT[2:3])/100  # maximum thickness
+L = int(args.LPQTT[0])
+P = int(args.LPQTT[1])
+Q = args.LPQTT[2]
+T = float(args.LPQTT[3:5])/100  # maximum thickness
+cld = 0.15 * L                  # design lift coefficient
+p = 0.05 * P                    # position of maximum camber
+r, k1_base = MEANLINE_TABLE[(args.LPQTT[1], args.LPQTT[2])]
+k1 = k1_base * (cld / 0.3)      # tabulated k1 values are for cld = 0.3
 
 # calculate 
 Npts = len(x)
@@ -117,7 +149,7 @@ x_C, y_C, x_U, y_U, x_L, y_L = dealzeros(Npts, 6)  # initialise all
 for i in range(Npts):
     x_c = x[i]
 
-    # thickness
+    # thickness (same as naca4series)
     y_t = T/0.20 * ( 0.2969 * math.sqrt(x_c)
                    - 0.1260 * x_c
                    - 0.3516 * x_c**2
@@ -125,18 +157,45 @@ for i in range(Npts):
                    - 0.1015 * x_c**4 )
 
     # mean camber line
-    if M==0 and P==0:
-        # symmetrical
+    if cld == 0:
+        # no lift means symmetrical and thus no camber
         y_c = 0
         dycdx = 0
-    else:
-        # cambered
-        if (0 <= x_c) and (x_c <= P):
-            y_c = M/(P**2)*(2*P*x_c-x_c**2)
-            dycdx = 2*M/(P**2)*(P-x_c)
+    elif Q == '0':
+        # standard mean line
+        if 0 <= x_c < r:
+            y_c = k1/6.0 * (x_c**3 - 3*r*x_c**2 + r**2*(3 - r)*x_c)
+            dycdx = k1/6.0 * (3*x_c**2 - 6*r*x_c + r**2*(3 - r))
         else:
-            y_c = M/((1-P)**2)*((1-2*P)+2*P*x_c-x_c**2)
-            dycdx = 2*M/((1-P)**2)*(P-x_c)
+            y_c = k1/6.0 * r**3 * (1 - x_c)
+            dycdx = -k1/6.0 * r**3
+    else:
+        # reflex mean line
+        k2_k1 = (3*(r - p)**2 - r**3) / ((1 - r)**3)  # from NACA-TR-537
+        if 0 <= x_c < r:
+            y_c = k1/6.0 * (
+                (x_c - r)**3
+                - k2_k1*(1 - r)**3*x_c
+                - r**3*x_c
+                + r**3
+            )
+            dycdx = k1/6.0 * (
+                3*(x_c - r)**2
+                - k2_k1*(1 - r)**3
+                - r**3
+            )
+        else:
+            y_c = k1/6.0 * (
+                k2_k1*(x_c - r)**3
+                - k2_k1*(1 - r)**3*x_c
+                - r**3*x_c
+                + r**3
+            )
+            dycdx = k1/6.0 * (
+                3*k2_k1*(x_c - r)**2
+                - k2_k1*(1 - r)**3
+                - r**3
+            )
 
     # coordinates
     theta = math.atan(dycdx)
